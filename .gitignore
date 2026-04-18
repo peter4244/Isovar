@@ -37,6 +37,7 @@ cache/
 *.bw
 inst/extdata/*.tsv.gz
 !inst/extdata/akr1a1_splaire_test.tsv.gz
+!inst/extdata/gwas_akr1a1_test.tsv.gz
 
 # Build output
 docs/
