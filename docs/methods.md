@@ -31,9 +31,13 @@ Allele alignment between variant ref/alt and GWAS effect/other is classified as 
 
 For each implicated splice site, annotate the gene's isoforms from multiple long-read sources (HAEC-185 basal + NMD lungcells, with cell-type / treatment column masks) and classify which isoforms use canonical vs. shifted splice sites. Identify the dataset-specific dominant isoform and pair it against each comparator. Feed pairs to Isopair for event classification, PTC/hidden-PTC (via `traceReferenceAtg`), NMD attribution, and protein consequence. isoscope is invoked as a subprocess per source.
 
-### Stage 3 — haplotype grouping (Chunk B, planned)
+### Stage 3 — haplotype grouping (Chunk B)
 
-Variants are grouped into haplotypes via **LDlinkR** (official CRAN wrapper around the LDlink REST API), using actual r² / D′ rather than AF-cluster heuristics. The splaire-prioritized causal candidate is flagged within each haplotype. Tag SNPs that hitchhike with an indel causal variant get correctly attributed to their haplotype — something fine-mapping alone cannot do.
+Variants are grouped into haplotypes via **LDlinkR** (official CRAN wrapper around the LDlink REST API, backed by 1000 Genomes Phase 3), using actual r² with hierarchical clustering at `r2_threshold = 0.8`. Within each haplotype, the variant with the largest splaire `|Δ|` is flagged as the `causal_candidate`. Tag SNPs that hitchhike with an indel causal variant get correctly attributed to their haplotype — something fine-mapping alone cannot do.
+
+Variants not in 1000 Genomes (most indels, including our two splaire-causal AKR1A1 indels) fall back to **proximity attachment**: the orphan inherits the haplotype of its nearest-position neighbour. This is deliberately simple; the `haplotype_assigned_by` column marks `"ld_cluster"` vs. `"proximity"` so downstream code can weight them differently. Local-cohort LD via HAEC-185 genotypes is a planned replacement for proximity fallback once the VCF is accessible.
+
+CI never calls LDlink live — tests use a pre-built RDS fixture generated one time with `scripts/build_haplotype_fixture.R`.
 
 ### Stage 4 — per (gene, haplotype) report (Chunk F, planned)
 
@@ -70,3 +74,4 @@ See `docs/schemas.md` ("Provenance metadata") for the full schema and `R/metadat
 
 - 2026-04-18 — Chunk A landed: `buildAnnotatedCredibleSet()`, `annotateGwas()` (rsID + position match), `loadCopdGwas()`, `checkAlleleAlignment()`, `getLiftoverChain()`. Generic `sm_predictions` naming adopted throughout.
 - 2026-04-18 — Chunk A.3 landed: explicit input/output schemas (`docs/schemas.md`), nested credible-set output shape (one row per CS with list-column `variants`), helpers `nestCredibleSets()` / `as_flat()` / `write_tsv_pair()`, default column pruning for gnomAD + GWAS (opt in via `fields = "all"`), and provenance metadata propagation (`R/metadata.R`, sidecar JSON on write).
+- 2026-04-18 — Chunk B landed: `groupHaplotypes()` using `LDlinkR::LDmatrix` + hierarchical clustering, proximity fallback for variants not in 1KG, `haplotype_assigned_by` surfaced per row, fixture-based CI. `scripts/build_haplotype_fixture.R` one-time generator requires `LDLINK_TOKEN`.

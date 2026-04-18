@@ -6,7 +6,8 @@
 
 .isovar_deps <- list(
   cran = c("httr2", "cli", "cachem", "memoise", "readr", "dplyr",
-           "tidyr", "stringr", "tibble", "rlang", "vctrs"),
+           "tidyr", "stringr", "tibble", "rlang", "vctrs",
+           "LDlinkR", "jsonlite", "withr"),
   bioc = c("Rsamtools", "VariantAnnotation", "GenomicRanges", "GenomeInfoDb",
            "rtracklayer", "Biostrings", "S4Vectors")
 )

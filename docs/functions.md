@@ -81,11 +81,23 @@ Sidecar JSON round-trip. Writes `<data_path>.meta.json`; reads it back on load.
 - **Cache directories** — all remote-data functions accept a `cache_dir` argument; none are required. Default behavior is no cache.
 - **Argument name `sm_predictions`** — generic for splicing-model predictions. Currently splaire v1 schema only; see `docs/methods.md` "Design notes".
 
-## Pending (chunks B–G)
+## Haplotype grouping (`R/haplotype.R`)
+
+### `groupHaplotypes(variants, population, r2_threshold, token, fixture)`
+Groups variants into haplotypes using LDlink r² (via `LDlinkR::LDmatrix`) with hierarchical clustering at `r2_threshold` (default 0.8). Accepts flat per-variant tibbles or nested credible-set tibbles. For variants that aren't in the 1000 Genomes panel (most indels), falls back to **proximity assignment** — the orphan inherits the haplotype of its nearest-position neighbour. The `haplotype_assigned_by` column surfaces `"ld_cluster"` vs. `"proximity"` so downstream code can treat proximity calls with appropriate skepticism.
+
+Adds four columns:
+- `haplotype_id` (`"hap_1"`, `"hap_2"`, …)
+- `causal_candidate` (logical; TRUE for the variant with the largest `top_abs_delta` within each haplotype)
+- `ld_r2_to_causal` (numeric; r² to this haplotype's causal candidate)
+- `haplotype_assigned_by` (`"ld_cluster"` or `"proximity"`)
+
+Requires `Sys.getenv("LDLINK_TOKEN")` for the live path; pass `fixture = <RDS path>` for an offline / CI path. See `scripts/build_haplotype_fixture.R` to generate a fixture.
+
+## Pending (chunks C–G)
 
 Not yet implemented:
 
-- `groupHaplotypes()` (Chunk B)
 - `runIsoscopeGene()`, `classifyIsoformsBySiteUsage()` (Chunk C)
 - `longreadSources()`, `loadLongreadEvidence()` (Chunk D)
 - `parseStructuresMultiGtf()`, `loadTranscriptSequences()`, `hiddenPtcStatus()`, `computeDominantIsoform()` (Chunk E)

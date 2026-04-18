@@ -12,6 +12,8 @@
 - `sm_predictions` is the canonical generic argument name for splicing-model variant-effect predictions (splaire v1 schema for now; multi-model / multi-tissue planned).
 - Default column pruning: gnomAD returns `rsid, filter, af, af_nfe, af_eas, grpmax` by default (`fields = "all"` for the extended set); GWAS drops `gwas_z`/`gwas_n`/`gwas_imputersq`/`gwas_marker` from the default merged table.
 - Explicit schemas + column glossary documented in `docs/schemas.md`. Methods narrative in `docs/methods.md`; function dictionary in `docs/functions.md`.
+- `groupHaplotypes()` — haplotype grouping via `LDlinkR::LDmatrix` + hierarchical clustering at `r2_threshold`. Proximity fallback for variants absent from 1KG (most indels). Adds `haplotype_id`, `causal_candidate`, `ld_r2_to_causal`, `haplotype_assigned_by` columns. Live path gated by `LDLINK_TOKEN`; CI uses an RDS fixture.
+- `scripts/build_haplotype_fixture.R` — one-time helper to pre-compute the AKR1A1 r² matrix for offline tests.
 
 ## 0.0.1 (unreleased)
 
