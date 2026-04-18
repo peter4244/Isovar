@@ -81,6 +81,14 @@ Sidecar JSON round-trip. Writes `<data_path>.meta.json`; reads it back on load.
 - **Cache directories** — all remote-data functions accept a `cache_dir` argument; none are required. Default behavior is no cache.
 - **Argument name `sm_predictions`** — generic for splicing-model predictions. Currently splaire v1 schema only; see `docs/methods.md` "Design notes".
 
+## isoscope interface (`R/isoscope_iface.R`)
+
+### `runIsoscopeGene(gene, isoscope_config_path, output_dir, isoscope_dir, no_expr, extra_args)`
+Thin wrapper around the canonical isoscope `gene_isoform_annotation.R`. Invokes it as a subprocess with `--config <path>` so each long-read source can use its own config (without mutating the isoscope clone — see `inst/isoscope_configs/` for the canonical isovar configs). Parses the resulting TSV and attaches an `isovar_meta` attribute derived from the config's `ISOVAR_SOURCE_META` list (source label, cohort, tissue, n_samples, gencode_version, sqanti_run_date, conditions). Runs isoscope with `--no-expr` by default; Chunk D handles per-condition counts.
+
+### `classifyIsoformsBySiteUsage(iso_df, site_positions, kind = "junction_start")`
+Adds one logical column per site (`uses_<pos>_jstart` or `uses_<pos>_jend`) indicating whether the isoform's `junctions` tuple is anchored at that genomic coordinate. Junction-start usage (default) corresponds to donors on the + strand / acceptors on the − strand; `kind = "junction_end"` uses the other end.
+
 ## Haplotype grouping (`R/haplotype.R`)
 
 ### `groupHaplotypes(variants, population, r2_threshold, token, fixture)`
@@ -99,11 +107,10 @@ Requires `Sys.getenv("LDLINK_TOKEN")` for the live path; pass `fixture = <RDS pa
 ### `loadIsovarSecrets(path, overwrite, quiet)`
 Reads `KEY=VALUE` lines from a shell-style env file (default `~/.config/isovar/secrets.env`) and sets each as a session environment variable via `Sys.setenv()`. Existing env vars take precedence unless `overwrite = TRUE`. Called automatically from `groupHaplotypes()` when `LDLINK_TOKEN` isn't already set.
 
-## Pending (chunks C–G)
+## Pending (chunks D–G)
 
 Not yet implemented:
 
-- `runIsoscopeGene()`, `classifyIsoformsBySiteUsage()` (Chunk C)
 - `longreadSources()`, `loadLongreadEvidence()` (Chunk D)
 - `parseStructuresMultiGtf()`, `loadTranscriptSequences()`, `hiddenPtcStatus()`, `computeDominantIsoform()` (Chunk E)
 - `buildSpliceReport()` (Chunk F)

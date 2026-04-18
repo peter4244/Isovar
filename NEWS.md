@@ -14,6 +14,10 @@
 - Explicit schemas + column glossary documented in `docs/schemas.md`. Methods narrative in `docs/methods.md`; function dictionary in `docs/functions.md`.
 - `groupHaplotypes()` — haplotype grouping via `LDlinkR::LDmatrix` + hierarchical clustering at `r2_threshold`. Proximity fallback for variants absent from 1KG (most indels). Adds `haplotype_id`, `causal_candidate`, `ld_r2_to_causal`, `haplotype_assigned_by` columns. Live path gated by `LDLINK_TOKEN`; CI uses an RDS fixture.
 - `scripts/build_haplotype_fixture.R` — one-time helper to pre-compute the AKR1A1 r² matrix for offline tests.
+- `loadIsovarSecrets()` — user-level `KEY=VALUE` secrets at `~/.config/isovar/secrets.env`.
+- `runIsoscopeGene()` — thin wrapper around isoscope's `gene_isoform_annotation.R` with `--config <path>` (upstream isoscope change); each long-read source drives isoscope through its own `inst/isoscope_configs/*.R` file. `ISOVAR_SOURCE_META` in each config propagates into the output's `isovar_meta`.
+- `classifyIsoformsBySiteUsage()` — per-isoform logical columns for whether a junction is anchored at each requested genomic site.
+- `inst/isoscope_configs/haec185_basal.R` and `inst/isoscope_configs/nmd_lungcells.R` — canonical source configs for the two long-read datasets in scope.
 
 ## 0.0.1 (unreleased)
 
