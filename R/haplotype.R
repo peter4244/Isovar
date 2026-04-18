@@ -34,8 +34,10 @@
 #' @param population LDlink population code (default `"EUR"`). Use
 #'   [LDlinkR::list_pop()] to see options. Multi-population queries
 #'   like `c("CEU","YRI","CHB")` are supported by LDlink.
-#' @param r2_threshold r² bar for grouping into the same haplotype
-#'   (default 0.8). Variants with `r² >= threshold` cluster together.
+#' @param r2_thresholds Numeric vector of r² bars for clustering.
+#'   Default `c(0.8, 0.9, 0.95)` — a three-level resolution view from
+#'   broad LD blocks (0.8) to fine structure (0.95). For a single
+#'   threshold, pass a length-1 vector (e.g. `0.9`).
 #' @param token LDlink API token. Defaults to `Sys.getenv("LDLINK_TOKEN")`.
 #'   If empty, [loadIsovarSecrets()] is invoked on `secrets_path` and
 #'   the env var is re-checked. Ignored when `fixture` is supplied.
@@ -44,32 +46,73 @@
 #' @param secrets_path Path to the isovar secrets file for auto-load
 #'   of `LDLINK_TOKEN`. Default `~/.config/isovar/secrets.env`. Pass a
 #'   nonexistent path to disable auto-load (useful in tests).
-#' @return The input augmented with:
-#'   - `haplotype_id` (character, `"hap_1"`, `"hap_2"`, …)
-#'   - `causal_candidate` (logical; TRUE for the variant with the
+#' @return The input augmented with, for each r² level in
+#'   `r2_thresholds`, four columns suffixed by `_r{int(100*r²)}` (e.g.
+#'   `_r080`, `_r090`, `_r095`):
+#'   - `haplotype_id_r080` (character, `"hap_1"`, `"hap_2"`, …)
+#'   - `causal_candidate_r080` (logical; TRUE for the variant with the
 #'     largest `top_abs_delta` within each haplotype)
-#'   - `ld_r2_to_causal` (numeric; r² of this variant to its
+#'   - `ld_r2_to_causal_r080` (numeric; r² of this variant to its
 #'     haplotype's causal candidate; `NA` for proximity-attached rows)
-#'   - `haplotype_assigned_by` (`"ld_cluster"` or `"proximity"`)
+#'   And one resolution-invariant column:
+#'   - `haplotype_assigned_by` (`"ld_cluster"` or `"proximity"`) —
+#'     the same regardless of threshold, since it tracks whether the
+#'     variant is in the LD matrix at all.
 #' @export
 groupHaplotypes <- function(variants,
                             population = "EUR",
-                            r2_threshold = 0.8,
+                            r2_thresholds = c(0.8, 0.9, 0.95),
                             token = Sys.getenv("LDLINK_TOKEN"),
                             fixture = NULL,
                             secrets_path = "~/.config/isovar/secrets.env") {
+  stopifnot(
+    is.numeric(r2_thresholds),
+    length(r2_thresholds) >= 1L,
+    all(r2_thresholds > 0 & r2_thresholds <= 1)
+  )
   is_nested <- "variants" %in% names(variants) && is.list(variants$variants)
 
   if (is_nested) {
     variants$variants <- lapply(
       variants$variants,
-      function(v) .group_haplotypes_flat(v, population, r2_threshold, token,
-                                         fixture, secrets_path)
+      function(v) .group_haplotypes_multi(v, population, r2_thresholds, token,
+                                          fixture, secrets_path)
     )
     return(variants)
   }
-  .group_haplotypes_flat(variants, population, r2_threshold, token, fixture,
-                         secrets_path)
+  .group_haplotypes_multi(variants, population, r2_thresholds, token, fixture,
+                          secrets_path)
+}
+
+.group_haplotypes_multi <- function(variants,
+                                    population,
+                                    r2_thresholds,
+                                    token,
+                                    fixture,
+                                    secrets_path) {
+  # Call the single-threshold function once per r² level, merging the
+  # per-threshold columns. The LD matrix is fetched / read once (via
+  # .get_ld_matrix caching) and the clustering is cheap, so multi-res
+  # adds negligible cost.
+  for (thresh in r2_thresholds) {
+    one <- .group_haplotypes_flat(variants, population, thresh, token,
+                                  fixture, secrets_path)
+    suffix <- sprintf("_r%03d", as.integer(round(100 * thresh)))
+    for (col in c("haplotype_id", "causal_candidate", "ld_r2_to_causal")) {
+      variants[[paste0(col, suffix)]] <- one[[col]]
+    }
+    # haplotype_assigned_by is threshold-invariant; attach once
+    if (!"haplotype_assigned_by" %in% names(variants))
+      variants$haplotype_assigned_by <- one$haplotype_assigned_by
+  }
+  # Carry the metadata from the last call (any of them has the same sources)
+  meta <- getIsovarMeta(one, require = FALSE)
+  if (!is.null(meta)) {
+    meta$sources[[length(meta$sources)]]$r2_thresholds <- r2_thresholds
+    setIsovarMeta(variants, meta)
+  } else {
+    variants
+  }
 }
 
 # -- internals ---------------------------------------------------------
