@@ -1,0 +1,10 @@
+# isovar
+
+## 0.0.1 (unreleased)
+
+Initial scaffold.
+
+- `rankSplaireVariants()` — rank credible-set variants by splaire / splaireVar delta across donor / acceptor / splice-site-usage heads.
+- `annotateGnomad()` — attach rsID and gnomAD v4.1 population allele frequencies via remote tabix over AWS Open Data (region-batched).
+- `implicatedSpliceSites()` — derive structured splice-site objects from splaire rows, detecting the "motif shifted by indel length" pattern.
+- First runs prototyped against AKR1A1 credible-set variants from HAEC-185.

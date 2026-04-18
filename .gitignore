@@ -1,0 +1,44 @@
+# R
+.Rproj.user/
+.Rhistory
+.RData
+.Ruserdata
+*.Rproj
+.Renviron
+
+# caches
+.cache/
+cache/
+/tmp/
+
+# macOS
+.DS_Store
+
+# Editor
+.vscode/
+.idea/
+
+# Local credentials / personal paths
+.env
+.env.local
+
+# Large data — never commit
+*.bam
+*.bai
+*.vcf
+*.vcf.gz
+*.vcf.bgz
+*.tbi
+*.bgz
+*.fasta
+*.fa
+*.rds
+*.bigwig
+*.bw
+inst/extdata/*.tsv.gz
+!inst/extdata/akr1a1_splaire_test.tsv.gz
+
+# Build output
+docs/
+*.html
+*.pdf
