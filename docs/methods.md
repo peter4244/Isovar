@@ -74,4 +74,8 @@ See `docs/schemas.md` ("Provenance metadata") for the full schema and `R/metadat
 
 - 2026-04-18 — Chunk A landed: `buildAnnotatedCredibleSet()`, `annotateGwas()` (rsID + position match), `loadCopdGwas()`, `checkAlleleAlignment()`, `getLiftoverChain()`. Generic `sm_predictions` naming adopted throughout.
 - 2026-04-18 — Chunk A.3 landed: explicit input/output schemas (`docs/schemas.md`), nested credible-set output shape (one row per CS with list-column `variants`), helpers `nestCredibleSets()` / `as_flat()` / `write_tsv_pair()`, default column pruning for gnomAD + GWAS (opt in via `fields = "all"`), and provenance metadata propagation (`R/metadata.R`, sidecar JSON on write).
-- 2026-04-18 — Chunk B landed: `groupHaplotypes()` using `LDlinkR::LDmatrix` + hierarchical clustering, proximity fallback for variants not in 1KG, `haplotype_assigned_by` surfaced per row, fixture-based CI. `scripts/build_haplotype_fixture.R` one-time generator requires `LDLINK_TOKEN`.
+- 2026-04-18 — Chunk B landed: `groupHaplotypes()` using `LDlinkR::LDmatrix` + hierarchical clustering, proximity fallback for variants not in 1KG, `haplotype_assigned_by` surfaced per row, fixture-based CI. `scripts/build_haplotype_fixture.R` one-time generator requires `LDLINK_TOKEN`. Multi-resolution output (`c(0.8, 0.9, 0.95)` default), plus `summarizeHaplotypesByResolution()` + `rollupHaplotypeResolutions()` for COPD-guided threshold selection via β sign concordance and within-haplotype β SD.
+
+## Interpretation guardrails
+
+- **Saturated splice-model scores don't support fine-grained causal rankings.** Two variants with `top_abs_delta` both ≳ 0.85 are co-equal candidates; the model is saturated. Tie-break with phenotype alignment (which splice site is hit, relative to the sQTL-reported intron), long-read observation, or conditional / independent-signal analysis — not with `top_abs_delta` decimals.

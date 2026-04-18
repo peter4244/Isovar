@@ -148,7 +148,7 @@ Both TSVs get a `.meta.json` sidecar with the provenance metadata.
 ## Column glossary
 
 - **`pip`** (or `posterior_inclusion_probability`) — fine-mapping posterior inclusion probability for the variant within its credible set. In `[0, 1]`; sums over a credible set at or near 1 by construction.
-- **`top_abs_delta`** — largest absolute splice-prediction delta (alt − ref) across the configured model families and splice-site heads in a ±5 kb scanning window around the variant.
+- **`top_abs_delta`** — largest absolute splice-prediction delta (alt − ref) across the configured model families and splice-site heads in a ±5 kb scanning window around the variant. Often abbreviated `|Δ|` in narrative. Bounded on `[0, 1]`. **Values near the ceiling (~0.85+) are in the model's saturation regime — small numerical differences between such variants should not be treated as meaningful causal rankings.** Tie-break with phenotype alignment (which splice site does the variant affect, relative to the measured phenotype?), long-read observations, or conditional analysis, not with `top_abs_delta` precision.
 - **`top_model`** — which model family produced the winning delta: `splaire` (reference-trained) or `splaireVar` (variant-trained).
 - **`top_head`** — which splice-site head: `don` (donor / 5′ss), `acc` (acceptor / 3′ss), `ssu` (general splice-site usage).
 - **`top_direction`** — sign of the winning delta: `inc` (creation / strengthening) or `dec` (loss / weakening).
