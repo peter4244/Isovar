@@ -107,10 +107,17 @@ Requires `Sys.getenv("LDLINK_TOKEN")` for the live path; pass `fixture = <RDS pa
 ### `loadIsovarSecrets(path, overwrite, quiet)`
 Reads `KEY=VALUE` lines from a shell-style env file (default `~/.config/isovar/secrets.env`) and sets each as a session environment variable via `Sys.setenv()`. Existing env vars take precedence unless `overwrite = TRUE`. Called automatically from `groupHaplotypes()` when `LDLINK_TOKEN` isn't already set.
 
-## Pending (chunks D–G)
+## Long-read evidence (`R/longread_sources.R`)
 
-Not yet implemented:
+### `longreadSources(isovar_dir)`
+Returns the catalogue of long-read sources: the four canonical views `haec185_sqanti`, `haec185_isocall`, `nmd_sqanti`, `nmd_isocall`. Each entry has `isoscope_config`, `count_matrix_path`, `count_delim`, `sample_schema`, `cohort`, `tissue`, `calling_stage`.
 
-- `longreadSources()`, `loadLongreadEvidence()` (Chunk D)
+### `parseSampleColumns(column_names, sample_schema)`
+Decodes count-matrix column names into per-sample metadata. Schemas: `"donor_only"` (HAEC-185 style: bare donor IDs, single "baseline" condition) and `"sample_celltype_donor_treatment"` (NMD style: `Sample\d+_CELLTYPE_DONOR_TREATMENT` with `DD_ALI|DD|AT|DO|FB|MV` × `DMSO|Smg1i`).
+
+### `loadLongreadEvidence(gene, sources, celltypes, treatments)`
+Runs isoscope for `gene` against each source, loads each source's count matrix, filters to the gene's isoforms, and parses sample columns. Returns a nested tibble (one row per source) with list-columns `annotation` (isoscope output), `counts` (isoform × sample matrix), `samples` (per-column metadata). NMD sources honor `celltypes` / `treatments` filters at load time; HAEC-185 sources ignore them (only "baseline" condition).
+
+## sQTL results (`R/sqtl.R`)
 - `parseStructuresMultiGtf()`, `loadTranscriptSequences()`, `hiddenPtcStatus()`, `computeDominantIsoform()` (Chunk E)
 - `buildSpliceReport()` (Chunk F)

@@ -19,6 +19,8 @@
 - `classifyIsoformsBySiteUsage()` — per-isoform logical columns for whether a junction is anchored at each requested genomic site.
 - `inst/isoscope_configs/haec185_basal.R` and `inst/isoscope_configs/nmd_lungcells.R` — canonical source configs for the two long-read datasets in scope.
 - Optional **isocall (pre-SQANTI) mode** via `inst/isoscope_configs/{haec185_basal,nmd_lungcells}_isocall.R`. Requires the isoscope upstream change adding `SOURCE_KIND = "isocall"` (isoscope@157f121). Useful for testing whether SQANTI's junction correction has altered the long-read evidence relative to raw calls.
+- `longreadSources()`, `parseSampleColumns()`, `loadLongreadEvidence()` — multi-source long-read evidence with per-condition stratification. Per-source count matrices are parsed into donor + celltype + treatment metadata via the source's `sample_schema` (`donor_only` for HAEC-185, `sample_celltype_donor_treatment` for NMD). NMD sources honor `celltypes` / `treatments` filters at load time.
+- `loadSqtlResults()` / `annotateSqtl()` — short-read Leafcutter sQTL ingestion (tensorqtl `cis_qtl_pairs` parquet format) with arrow-backed filter pushdown. `inst/sqtl_configs/haec185_basal_leafcutter.R` is the canonical config.
 
 ## 0.0.1 (unreleased)
 
