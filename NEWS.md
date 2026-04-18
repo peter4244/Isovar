@@ -18,6 +18,7 @@
 - `runIsoscopeGene()` — thin wrapper around isoscope's `gene_isoform_annotation.R` with `--config <path>` (upstream isoscope change); each long-read source drives isoscope through its own `inst/isoscope_configs/*.R` file. `ISOVAR_SOURCE_META` in each config propagates into the output's `isovar_meta`.
 - `classifyIsoformsBySiteUsage()` — per-isoform logical columns for whether a junction is anchored at each requested genomic site.
 - `inst/isoscope_configs/haec185_basal.R` and `inst/isoscope_configs/nmd_lungcells.R` — canonical source configs for the two long-read datasets in scope.
+- Optional **isocall (pre-SQANTI) mode** via `inst/isoscope_configs/{haec185_basal,nmd_lungcells}_isocall.R`. Requires the isoscope upstream change adding `SOURCE_KIND = "isocall"` (isoscope@157f121). Useful for testing whether SQANTI's junction correction has altered the long-read evidence relative to raw calls.
 
 ## 0.0.1 (unreleased)
 
