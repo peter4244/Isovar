@@ -94,6 +94,11 @@ Adds four columns:
 
 Requires `Sys.getenv("LDLINK_TOKEN")` for the live path; pass `fixture = <RDS path>` for an offline / CI path. See `scripts/build_haplotype_fixture.R` to generate a fixture.
 
+## Secrets (`R/secrets.R`)
+
+### `loadIsovarSecrets(path, overwrite, quiet)`
+Reads `KEY=VALUE` lines from a shell-style env file (default `~/.config/isovar/secrets.env`) and sets each as a session environment variable via `Sys.setenv()`. Existing env vars take precedence unless `overwrite = TRUE`. Called automatically from `groupHaplotypes()` when `LDLINK_TOKEN` isn't already set.
+
 ## Pending (chunks C–G)
 
 Not yet implemented:

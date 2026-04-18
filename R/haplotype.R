@@ -37,9 +37,13 @@
 #' @param r2_threshold r² bar for grouping into the same haplotype
 #'   (default 0.8). Variants with `r² >= threshold` cluster together.
 #' @param token LDlink API token. Defaults to `Sys.getenv("LDLINK_TOKEN")`.
-#'   Ignored when `fixture` is supplied.
+#'   If empty, [loadIsovarSecrets()] is invoked on `secrets_path` and
+#'   the env var is re-checked. Ignored when `fixture` is supplied.
 #' @param fixture Optional: an RDS path, or a pre-loaded LDlinkR
 #'   `LDmatrix` data.frame. When supplied, skips the live LDlink call.
+#' @param secrets_path Path to the isovar secrets file for auto-load
+#'   of `LDLINK_TOKEN`. Default `~/.config/isovar/secrets.env`. Pass a
+#'   nonexistent path to disable auto-load (useful in tests).
 #' @return The input augmented with:
 #'   - `haplotype_id` (character, `"hap_1"`, `"hap_2"`, …)
 #'   - `causal_candidate` (logical; TRUE for the variant with the
@@ -52,17 +56,20 @@ groupHaplotypes <- function(variants,
                             population = "EUR",
                             r2_threshold = 0.8,
                             token = Sys.getenv("LDLINK_TOKEN"),
-                            fixture = NULL) {
+                            fixture = NULL,
+                            secrets_path = "~/.config/isovar/secrets.env") {
   is_nested <- "variants" %in% names(variants) && is.list(variants$variants)
 
   if (is_nested) {
     variants$variants <- lapply(
       variants$variants,
-      function(v) .group_haplotypes_flat(v, population, r2_threshold, token, fixture)
+      function(v) .group_haplotypes_flat(v, population, r2_threshold, token,
+                                         fixture, secrets_path)
     )
     return(variants)
   }
-  .group_haplotypes_flat(variants, population, r2_threshold, token, fixture)
+  .group_haplotypes_flat(variants, population, r2_threshold, token, fixture,
+                         secrets_path)
 }
 
 # -- internals ---------------------------------------------------------
@@ -71,7 +78,8 @@ groupHaplotypes <- function(variants,
                                    population,
                                    r2_threshold,
                                    token,
-                                   fixture) {
+                                   fixture,
+                                   secrets_path) {
   required <- c("rsid", "pos", "top_abs_delta")
   missing <- setdiff(required, names(variants))
   if (length(missing))
@@ -88,7 +96,7 @@ groupHaplotypes <- function(variants,
     return(variants)
   }
 
-  ld_df  <- .get_ld_matrix(rsids, population, token, fixture)
+  ld_df  <- .get_ld_matrix(rsids, population, token, fixture, secrets_path)
   ld_mat <- .ld_df_to_matrix(ld_df)
 
   # Keep only variants that are actually in the LD matrix
@@ -155,7 +163,8 @@ groupHaplotypes <- function(variants,
   setIsovarMeta(variants, merged)
 }
 
-.get_ld_matrix <- function(rsids, population, token, fixture) {
+.get_ld_matrix <- function(rsids, population, token, fixture,
+                           secrets_path = "~/.config/isovar/secrets.env") {
   if (!is.null(fixture)) {
     if (is.character(fixture) && length(fixture) == 1L) {
       if (!file.exists(fixture))
@@ -166,10 +175,15 @@ groupHaplotypes <- function(variants,
     cli::cli_abort("{.arg fixture} must be an RDS path or a data.frame.")
   }
 
+  # Auto-load from secrets file if env var isn't set.
+  if (!nzchar(token)) {
+    loadIsovarSecrets(path = secrets_path, quiet = TRUE)
+    token <- Sys.getenv("LDLINK_TOKEN")
+  }
   if (!nzchar(token))
     cli::cli_abort(c(
       "No LDlink token available.",
-      "i" = "Set env var {.envvar LDLINK_TOKEN} or pass a precomputed {.arg fixture}.",
+      "i" = "Set env var {.envvar LDLINK_TOKEN}, add {.val LDLINK_TOKEN=...} to {.path ~/.config/isovar/secrets.env}, or pass a precomputed {.arg fixture}.",
       "i" = "Register free at {.url https://ldlink.nci.nih.gov/?tab=apiaccess}."
     ))
   if (!requireNamespace("LDlinkR", quietly = TRUE))

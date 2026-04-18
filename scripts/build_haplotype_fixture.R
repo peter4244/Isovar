@@ -21,12 +21,15 @@ suppressPackageStartupMessages({
 isovar_dir <- "/Users/petecastaldi/claude_projects/isovar"
 for (f in list.files(file.path(isovar_dir, "R"), full.names = TRUE)) source(f)
 
+# Accept LDLINK_TOKEN from the shell, or auto-load from
+# ~/.config/isovar/secrets.env.
+loadIsovarSecrets(quiet = TRUE)
 token <- Sys.getenv("LDLINK_TOKEN")
 if (!nzchar(token)) {
   cli::cli_abort(c(
     "LDLINK_TOKEN not set.",
-    "i" = "Register free at https://ldlink.nci.nih.gov/?tab=apiaccess",
-    "i" = "Then re-run: LDLINK_TOKEN=<your_token> Rscript scripts/build_haplotype_fixture.R"
+    "i" = "Add LDLINK_TOKEN=<token> to ~/.config/isovar/secrets.env or export it in your shell.",
+    "i" = "Register free at https://ldlink.nci.nih.gov/?tab=apiaccess"
   ))
 }
 

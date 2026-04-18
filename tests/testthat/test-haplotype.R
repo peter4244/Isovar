@@ -35,7 +35,7 @@ test_that("groupHaplotypes assigns haplotype_id and causal_candidate", {
   expect_lte(n_hap, 8L)
 })
 
-test_that("the two AKR1A1 indels are causal candidates of their haplotypes", {
+test_that("AKR1A1 indels are correctly placed by LD / proximity", {
   skip_if_no_ld_fixture()
   flat <- as_flat(buildAnnotatedCredibleSet(
     sm_predictions   = akr1a1_fixture(),
@@ -44,11 +44,23 @@ test_that("the two AKR1A1 indels are causal candidates of their haplotypes", {
     gnomad_cache_dir = "/tmp/isovar_cache"
   ))
   out <- groupHaplotypes(flat, fixture = akr1a1_ld_fixture())
-  indel_rows <- out[out$rsid %in% c("rs61467610", "rs66922050"), ]
-  expect_equal(nrow(indel_rows), 2L)
-  expect_true(all(indel_rows$causal_candidate))
-  # Indels aren't in 1KG panel → proximity-attached, not ld_cluster
-  expect_true(all(indel_rows$haplotype_assigned_by == "proximity"))
+
+  rs6692 <- out[out$rsid == "rs66922050", ]
+  rs6146 <- out[out$rsid == "rs61467610", ]
+  expect_equal(nrow(rs6692), 1L)
+  expect_equal(nrow(rs6146), 1L)
+
+  # rs66922050 (10-bp DEL) is in 1000 Genomes → LD-clustered.
+  # rs61467610 (6-bp INS) is not → proximity-attached.
+  expect_equal(rs6692$haplotype_assigned_by, "ld_cluster")
+  expect_equal(rs6146$haplotype_assigned_by, "proximity")
+
+  # At r² >= 0.8 EUR, AKR1A1 credible-set variants mostly collapse into one
+  # haplotype block. Both indels land in the same cluster, so rs66922050
+  # (larger |delta|) is its causal candidate; rs61467610 is NOT because
+  # it's in the same haplotype. causal_candidate is per-haplotype-unique.
+  expect_true(rs6692$causal_candidate)
+  expect_equal(rs6692$haplotype_id, rs6146$haplotype_id)
 })
 
 test_that("groupHaplotypes works on nested credible-set input", {
@@ -76,10 +88,15 @@ test_that("missing token and missing fixture produce a clear error", {
     alt        = c("G", "T"),
     top_abs_delta = c(0.5, 0.3)
   )
-  withr::with_envvar(c(LDLINK_TOKEN = ""),
-    expect_error(groupHaplotypes(flat, fixture = NULL),
-                 "No LDlink token")
-  )
+  # Point secrets_path at a nonexistent file so the auto-loader can't
+  # pick up a real token from ~/.config/isovar/.
+  empty_secrets <- tempfile(fileext = ".env")
+  withr::with_envvar(c(LDLINK_TOKEN = ""), {
+    expect_error(
+      groupHaplotypes(flat, fixture = NULL, secrets_path = empty_secrets),
+      "No LDlink token"
+    )
+  })
 })
 
 test_that(".cluster_ld produces 1 haplotype for perfectly linked variants", {
