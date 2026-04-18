@@ -145,3 +145,39 @@ test_that(".cluster_ld produces N haplotypes for independent variants", {
   haps <- .cluster_ld(m, r2_threshold = 0.8)
   expect_equal(length(unique(haps)), 3L)
 })
+
+test_that("summarizeHaplotypesByResolution returns one row per (resolution, haplotype)", {
+  skip_if_no_ld_fixture()
+  flat <- as_flat(buildAnnotatedCredibleSet(
+    sm_predictions   = akr1a1_fixture(),
+    gwas             = file.path(.isovar_pkgroot(), "inst/extdata/gwas_akr1a1_test.tsv.gz"),
+    gene             = "AKR1A1",
+    gnomad_cache_dir = "/tmp/isovar_cache"
+  ))
+  out <- groupHaplotypes(flat, fixture = akr1a1_ld_fixture())
+  summ <- summarizeHaplotypesByResolution(out)
+  expect_true(all(c("resolution","r2_threshold","haplotype_id","n_variants",
+                    "causal_rsid","causal_abs_delta","mean_beta","sd_beta",
+                    "sign_concordance","min_p","n_gws") %in% names(summ)))
+  expect_setequal(unique(summ$resolution), c("r080","r090","r095"))
+  # Concordance is bounded [0, 1]
+  concs <- summ$sign_concordance[!is.na(summ$sign_concordance)]
+  expect_true(all(concs >= 0 & concs <= 1))
+})
+
+test_that("rollupHaplotypeResolutions produces one row per resolution", {
+  skip_if_no_ld_fixture()
+  flat <- as_flat(buildAnnotatedCredibleSet(
+    sm_predictions   = akr1a1_fixture(),
+    gwas             = file.path(.isovar_pkgroot(), "inst/extdata/gwas_akr1a1_test.tsv.gz"),
+    gene             = "AKR1A1",
+    gnomad_cache_dir = "/tmp/isovar_cache"
+  ))
+  out <- groupHaplotypes(flat, fixture = akr1a1_ld_fixture())
+  summ <- summarizeHaplotypesByResolution(out)
+  roll <- rollupHaplotypeResolutions(summ)
+  expect_equal(nrow(roll), 3L)   # r080, r090, r095
+  expect_true(all(c("resolution", "r2_threshold", "n_haplotypes",
+                    "mean_within_hap_beta_sd", "mean_sign_concordance",
+                    "frac_significant_haps") %in% names(roll)))
+})

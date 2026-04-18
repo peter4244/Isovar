@@ -258,6 +258,136 @@ groupHaplotypes <- function(variants,
   m[keep, keep, drop = FALSE]
 }
 
+#' Summarize haplotypes across resolutions with GWAS coherence metrics
+#'
+#' For each r² level in a multi-resolution [groupHaplotypes()] output,
+#' summarize each haplotype cluster with GWAS consistency statistics.
+#' The goal is to surface **which resolution produces the most
+#' biologically coherent haplotypes** — ones whose variants share a
+#' GWAS effect direction and magnitude.
+#'
+#' A haplotype is "cohesive" when its GWAS-matched variants agree in
+#' β sign and cluster tightly in β magnitude. Splitting a real
+#' haplotype too finely loses coherence (more clusters each with fewer
+#' variants); merging too coarsely mixes variants with opposite effect
+#' directions (high within-cluster β SD).
+#'
+#' The returned per-haplotype tibble is the long-format view. Use
+#' [rollupHaplotypeResolutions()] to reduce it to one row per
+#' resolution for threshold selection.
+#'
+#' @param x A flat per-variant tibble augmented by [groupHaplotypes()]
+#'   (must contain the `_r0XX` suffix columns). For nested
+#'   credible-set input, unnest with [as_flat()] first.
+#' @param gwas_beta_col,gwas_p_col Column names for GWAS β and p.
+#'   Defaults match [buildAnnotatedCredibleSet()] output.
+#' @return A tibble with one row per (resolution, haplotype) and
+#'   columns: `resolution` (e.g. `"r080"`), `r2_threshold`,
+#'   `haplotype_id`, `n_variants`, `n_gwas_variants`,
+#'   `causal_rsid`, `causal_abs_delta`, `mean_beta`, `sd_beta`,
+#'   `sign_concordance` (fraction of GWAS variants whose β sign
+#'   matches the causal / mode), `min_p`, `n_gws` (p < 5e-8).
+#' @export
+summarizeHaplotypesByResolution <- function(x,
+                                            gwas_beta_col = "gwas_beta",
+                                            gwas_p_col    = "gwas_p") {
+  res_cols <- grep("^haplotype_id_r", names(x), value = TRUE)
+  if (length(res_cols) == 0L)
+    cli::cli_abort("Input has no {.field haplotype_id_r*} columns — did you call {.fn groupHaplotypes}?")
+
+  parts <- vector("list", length(res_cols))
+  for (i in seq_along(res_cols)) {
+    hid_col    <- res_cols[i]
+    sfx        <- sub("^haplotype_id", "", hid_col)   # e.g. "_r080"
+    causal_col <- paste0("causal_candidate", sfx)
+    resolution <- sub("^_", "", sfx)
+    r2_thresh  <- as.numeric(sub("^r", "", resolution)) / 100
+
+    df <- x
+    df$.hap    <- df[[hid_col]]
+    df$.causal <- df[[causal_col]]
+    df$.beta   <- if (gwas_beta_col %in% names(df)) df[[gwas_beta_col]] else NA_real_
+    df$.p      <- if (gwas_p_col    %in% names(df)) df[[gwas_p_col]]    else NA_real_
+
+    # Adjust β for allele alignment (flip on 'swapped' rows if column present)
+    if ("gwas_alignment_status" %in% names(df)) {
+      flip <- !is.na(df$gwas_alignment_status) & df$gwas_alignment_status == "swapped"
+      df$.beta[flip] <- -df$.beta[flip]
+    }
+
+    agg <- df %>%
+      dplyr::group_by(haplotype_id = .data$.hap) %>%
+      dplyr::summarise(
+        n_variants       = dplyr::n(),
+        n_gwas_variants  = sum(!is.na(.data$.beta)),
+        causal_rsid      = .data$rsid[.data$.causal][1],
+        causal_abs_delta = max(.data$top_abs_delta, na.rm = TRUE),
+        mean_beta        = mean(.data$.beta, na.rm = TRUE),
+        sd_beta          = stats::sd(.data$.beta, na.rm = TRUE),
+        sign_concordance = {
+          vals <- .data$.beta[!is.na(.data$.beta)]
+          if (length(vals) == 0L) NA_real_
+          else {
+            mode_sign <- sign(sum(sign(vals)))
+            if (mode_sign == 0) 0.5 else
+              mean(sign(vals) == mode_sign)
+          }
+        },
+        min_p            = suppressWarnings(min(.data$.p, na.rm = TRUE)),
+        n_gws            = sum(!is.na(.data$.p) & .data$.p < 5e-8),
+        .groups = "drop"
+      ) %>%
+      dplyr::mutate(
+        resolution   = resolution,
+        r2_threshold = r2_thresh,
+        min_p        = ifelse(is.infinite(.data$min_p), NA_real_, .data$min_p)
+      ) %>%
+      dplyr::relocate(resolution, r2_threshold)
+    parts[[i]] <- agg
+  }
+  out <- dplyr::bind_rows(parts)
+  meta <- getIsovarMeta(x, require = FALSE)
+  if (!is.null(meta)) attr(out, "isovar_meta") <- meta
+  out
+}
+
+#' Roll haplotype summaries up to one row per resolution
+#'
+#' Takes the long per-haplotype summary from
+#' [summarizeHaplotypesByResolution()] and reduces to one row per r²
+#' level with aggregate cohesion metrics. Intended for **threshold
+#' selection**: pick the resolution where haplotypes are most
+#' internally consistent in GWAS signal without over-splitting.
+#'
+#' Metrics (weighted by haplotype size):
+#' - `mean_within_hap_beta_sd` — lower is better (cohesive clusters)
+#' - `mean_sign_concordance` — higher is better (consistent β signs
+#'   within clusters). Bounded `[0.5, 1.0]`; 1.0 = perfect.
+#' - `frac_significant_haps` — fraction of haplotypes with at least
+#'   one GWAS-significant (p < 5e-8) variant.
+#' - `n_haplotypes` — total haplotype count at that resolution.
+#'
+#' @param hap_summary Output of [summarizeHaplotypesByResolution()].
+#' @return A tibble with one row per resolution.
+#' @export
+rollupHaplotypeResolutions <- function(hap_summary) {
+  hap_summary %>%
+    dplyr::group_by(resolution, r2_threshold) %>%
+    dplyr::summarise(
+      n_haplotypes           = dplyr::n(),
+      n_gwas_significant_hap = sum(.data$n_gws > 0, na.rm = TRUE),
+      frac_significant_haps  = sum(.data$n_gws > 0, na.rm = TRUE) / dplyr::n(),
+      mean_within_hap_beta_sd = stats::weighted.mean(
+        .data$sd_beta, w = .data$n_gwas_variants, na.rm = TRUE
+      ),
+      mean_sign_concordance  = stats::weighted.mean(
+        .data$sign_concordance, w = .data$n_gwas_variants, na.rm = TRUE
+      ),
+      .groups = "drop"
+    ) %>%
+    dplyr::arrange(r2_threshold)
+}
+
 .cluster_ld <- function(ld_mat, r2_threshold) {
   if (nrow(ld_mat) == 0L) return(character())
   if (nrow(ld_mat) == 1L) {

@@ -56,6 +56,33 @@ show <- out %>%
          r2_to_causal, beta, p)
 print(as.data.frame(show), row.names = FALSE)
 
+cli::cli_h1("Resolution selection — GWAS coherence per r² level")
+
+out_multi <- groupHaplotypes(flat, r2_thresholds = c(0.8, 0.9, 0.95), fixture = fx)
+hap_sum   <- summarizeHaplotypesByResolution(out_multi)
+rollup    <- rollupHaplotypeResolutions(hap_sum)
+
+cat("Per-haplotype summary (β aligned for swapped orientation):\n\n")
+disp <- hap_sum %>%
+  arrange(resolution, desc(n_variants)) %>%
+  mutate(
+    causal = sprintf("%s (|Δ|=%.3f)", causal_rsid, causal_abs_delta),
+    mean_b = ifelse(is.na(mean_beta), "     —", sprintf("%+.4f", mean_beta)),
+    sd_b   = ifelse(is.na(sd_beta), "    —", sprintf("%.4f", sd_beta)),
+    sc     = ifelse(is.na(sign_concordance), " —", sprintf("%.2f", sign_concordance)),
+    min_p  = ifelse(is.na(min_p), "      —", format(min_p, digits = 2, scientific = TRUE))
+  ) %>%
+  select(res = resolution, hap = haplotype_id, n = n_variants, n_gw = n_gwas_variants,
+         causal, mean_b, sd_b, sc, min_p, n_gws)
+print(as.data.frame(disp), row.names = FALSE)
+
+cat("\nAggregate per-resolution coherence:\n\n")
+print(as.data.frame(rollup %>% mutate(
+  mean_within_hap_beta_sd = sprintf("%.4f", mean_within_hap_beta_sd),
+  mean_sign_concordance   = sprintf("%.3f", mean_sign_concordance),
+  frac_significant_haps   = sprintf("%.2f", frac_significant_haps)
+)), row.names = FALSE)
+
 cli::cli_h1("Provenance (sources attached to output)")
 meta <- getIsovarMeta(out)
 for (s in meta$sources)
