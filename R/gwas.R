@@ -262,8 +262,10 @@ getLiftoverChain <- function(from = "hg38", to = "hg19",
 #' This is the canonical Chunk A deliverable — one function, one
 #' merged table per gene.
 #'
-#' @param splaire_path Path to the splaire credible-set TSV (e.g.
-#'   `HAEC185_sQTL_credible_sets_splaire_scores.tsv.gz`).
+#' @param sm_predictions Splicing-model variant-effect predictions
+#'   (path or data.frame). Currently expects the splaire v1 schema;
+#'   multi-tissue / multi-model composition is a planned extension —
+#'   see "Design notes" in `docs/methods.md`.
 #' @param gwas A GWAS tibble from [loadCopdGwas()], OR a path to a
 #'   sumstats file (loaded transparently).
 #' @param gene Optional HGNC gene symbol(s) to restrict to.
@@ -277,14 +279,14 @@ getLiftoverChain <- function(from = "hg38", to = "hg19",
 #'   [annotateGnomad()], and [annotateGwas()] for the columns carried
 #'   through from each layer.
 #' @export
-buildAnnotatedCredibleSet <- function(splaire_path,
+buildAnnotatedCredibleSet <- function(sm_predictions,
                                       gwas,
                                       gene = NULL,
                                       gnomad_cache_dir = NULL,
                                       liftover_chain = NULL,
                                       variants_build = "GRCh38",
                                       gwas_build = "GRCh37") {
-  ranked <- rankSplaireVariants(splaire_path, gene = gene)
+  ranked <- rankSplaireVariants(sm_predictions, gene = gene)
   if (nrow(ranked) == 0L) return(ranked)
 
   gnom <- annotateGnomad(ranked$variant_id, cache_dir = gnomad_cache_dir)

@@ -31,9 +31,10 @@
 #' `splaireVar`, which was trained with variants and usually gives the
 #' more informative variant-effect signal).
 #'
-#' @param x Either a splaire-scores data.frame (raw schema, as in
-#'   `HAEC185_sQTL_credible_sets_splaire_scores.tsv.gz`) or a file
-#'   path readable by [rankSplaireVariants()].
+#' @param sm_predictions Splicing-model variant-effect predictions —
+#'   either a data.frame with the splaire schema or a file path readable
+#'   by [rankSplaireVariants()]. See that function for the rationale on
+#'   the generic argument name.
 #' @param gene Optional HGNC gene symbol(s) to restrict to.
 #' @param model Which model family to use for classification. Default
 #'   `"splaireVar"`. `"splaire"` uses the reference-trained family.
@@ -63,7 +64,7 @@
 #' subset(sites, magnitude >= 0.5)
 #' }
 #' @export
-implicatedSpliceSites <- function(x,
+implicatedSpliceSites <- function(sm_predictions,
                                   gene = NULL,
                                   model = c("splaireVar", "splaire"),
                                   heads = c("don", "acc", "ssu"),
@@ -79,7 +80,7 @@ implicatedSpliceSites <- function(x,
   )
   motif_shift_tolerance <- as.integer(motif_shift_tolerance)
 
-  df <- .load_splaire_table(x)
+  df <- .load_splaire_table(sm_predictions)
   if (!is.null(gene)) df <- df[df$gene %in% gene, , drop = FALSE]
   if (nrow(df) == 0L) return(.empty_sites_df())
 

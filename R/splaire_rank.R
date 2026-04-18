@@ -19,8 +19,15 @@
 #' *shift* rather than genuine gain/loss — see
 #' [implicatedSpliceSites()] for detection of that pattern.
 #'
-#' @param x Either a path to a splaire-scores TSV (optionally gzipped)
-#'   or a data.frame with the splaire column schema.
+#' @param sm_predictions Splicing-model variant-effect predictions:
+#'   either a path to a splaire-scores TSV (optionally gzipped), or a
+#'   pre-loaded data.frame with the splaire column schema. Named
+#'   generically because future work will feed this function from
+#'   non-splaire models (SpliceAI, Pangolin, splaireVar-retrained) and
+#'   from multiple tissues — the argument name should not hard-code the
+#'   model. The schema is currently splaire-v1-specific; generalizing
+#'   the schema (or routing different schemas to per-model parsers) is
+#'   a planned extension.
 #' @param gene Optional character vector of HGNC gene symbols to
 #'   restrict to. `NULL` (default) keeps all genes.
 #' @param magnitude_threshold Numeric in `[0, 1]`. Variants whose
@@ -46,7 +53,7 @@
 #' head(r, 10)
 #' }
 #' @export
-rankSplaireVariants <- function(x,
+rankSplaireVariants <- function(sm_predictions,
                                 gene = NULL,
                                 magnitude_threshold = 0.1,
                                 models = c("splaire", "splaireVar"),
@@ -59,7 +66,7 @@ rankSplaireVariants <- function(x,
   models <- match.arg(models, several.ok = TRUE)
   heads  <- match.arg(heads,  several.ok = TRUE)
 
-  df <- .load_splaire_table(x)
+  df <- .load_splaire_table(sm_predictions)
   if (!is.null(gene)) {
     df <- df[df$gene %in% gene, , drop = FALSE]
     if (nrow(df) == 0L)
@@ -125,14 +132,13 @@ rankSplaireVariants <- function(x,
 
 # -- internals ---------------------------------------------------------
 
-.load_splaire_table <- function(x) {
-  if (is.data.frame(x)) return(x)
-  if (!is.character(x) || length(x) != 1L)
-    cli::cli_abort("{.arg x} must be a data.frame or a single file path.")
-  if (!file.exists(x))
-    cli::cli_abort("File not found: {.path {x}}")
-  # readr handles .gz automatically; show_col_types = FALSE to keep quiet.
-  readr::read_tsv(x, show_col_types = FALSE, progress = FALSE)
+.load_splaire_table <- function(sm_predictions) {
+  if (is.data.frame(sm_predictions)) return(sm_predictions)
+  if (!is.character(sm_predictions) || length(sm_predictions) != 1L)
+    cli::cli_abort("{.arg sm_predictions} must be a data.frame or a single file path.")
+  if (!file.exists(sm_predictions))
+    cli::cli_abort("File not found: {.path {sm_predictions}}")
+  readr::read_tsv(sm_predictions, show_col_types = FALSE, progress = FALSE)
 }
 
 .split_variant_id <- function(ids) {

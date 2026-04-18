@@ -27,7 +27,7 @@ gwas_fixture    <- file.path(isovar_dir, "inst/extdata/gwas_akr1a1_test.tsv.gz")
 cli::cli_h1("AKR1A1 Chunk A — merged credible-set table")
 
 tbl <- buildAnnotatedCredibleSet(
-  splaire_path     = splaire_fixture,
+  sm_predictions   = splaire_fixture,
   gwas             = gwas_fixture,
   gene             = "AKR1A1",
   gnomad_cache_dir = "/tmp/isovar_cache"

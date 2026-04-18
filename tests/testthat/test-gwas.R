@@ -145,7 +145,7 @@ test_that("buildAnnotatedCredibleSet composes the full pipeline into one table",
   skip_on_cran()
   skip_if_no_internet()
   tbl <- buildAnnotatedCredibleSet(
-    splaire_path     = akr1a1_fixture(),
+    sm_predictions   = akr1a1_fixture(),
     gwas             = akr1a1_gwas_fixture(),
     gene             = "AKR1A1",
     gnomad_cache_dir = "/tmp/isovar_cache"

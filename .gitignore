@@ -40,6 +40,8 @@ inst/extdata/*.tsv.gz
 !inst/extdata/gwas_akr1a1_test.tsv.gz
 
 # Build output
-docs/
 *.html
 *.pdf
+
+# pkgdown build output lives at docs_build/, not docs/ (docs/ is tracked
+# — it holds methods.md and the function dictionary).
