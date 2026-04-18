@@ -3,8 +3,15 @@
 ## 0.0.2 (unreleased)
 
 - `loadCopdGwas()` — reads icgcUkb COPD summary statistics.
-- `annotateGwas()` — rsID-based (build-independent) join of GWAS effect estimates onto a variant table. Liftover deliberately not wired; add only if rsID coverage proves insufficient.
+- `annotateGwas()` — two-pass match: rsID (build-independent, primary) then genomic position with optional liftover (secondary). `gwas_matched_by` column surfaces which pass resolved each row.
 - `checkAlleleAlignment()` — classifies effect-allele orientation (`aligned` / `swapped` / `strand_flip` / `mismatch`) without silently flipping beta.
+- `getLiftoverChain()` — fetches + caches UCSC chain files (default: hg38ToHg19).
+- `buildAnnotatedCredibleSet()` — composed Step-1 pipeline returning a **nested credible-set tibble** (one row per CS with list-column `variants`).
+- `nestCredibleSets()`, `as_flat()`, `write_tsv_pair()` — output-shape helpers.
+- `setIsovarMeta()`, `getIsovarMeta()`, `mergeIsovarMeta()`, `writeMeta()`, `readMeta()` — provenance-metadata propagation; every isovar result carries genome build + GTF version + source list + timestamp; sidecar `.meta.json` on write.
+- `sm_predictions` is the canonical generic argument name for splicing-model variant-effect predictions (splaire v1 schema for now; multi-model / multi-tissue planned).
+- Default column pruning: gnomAD returns `rsid, filter, af, af_nfe, af_eas, grpmax` by default (`fields = "all"` for the extended set); GWAS drops `gwas_z`/`gwas_n`/`gwas_imputersq`/`gwas_marker` from the default merged table.
+- Explicit schemas + column glossary documented in `docs/schemas.md`. Methods narrative in `docs/methods.md`; function dictionary in `docs/functions.md`.
 
 ## 0.0.1 (unreleased)
 

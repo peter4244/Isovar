@@ -60,6 +60,13 @@ The current schema requirement is splaire v1 (the 80-column TSV produced for HAE
 
 Until that refactor lands, the documented guarantee is: the function accepts splaire v1 only; it errors explicitly on unrecognized schemas rather than guessing.
 
+## Provenance metadata
+
+Every isovar-produced object carries an `isovar_meta` attribute recording: isovar version, generation timestamp, genome build, GTF/annotation version (when applicable), and a list of upstream `sources` (each with `id`, `kind`, path/endpoint, model/cohort/tissue/build). Metadata propagates through every merge — when multiple inputs combine, their sources concatenate rather than collapse, and build/GTF disagreements are flagged as `mixed_builds` / `mixed_gtf` fields rather than silently resolved. On write, metadata is emitted as a sidecar `.meta.json` next to every saved TSV/RDS.
+
+See `docs/schemas.md` ("Provenance metadata") for the full schema and `R/metadata.R` for the accessors (`setIsovarMeta`, `getIsovarMeta`, `mergeIsovarMeta`, `writeMeta`, `readMeta`).
+
 ## Change log
 
 - 2026-04-18 — Chunk A landed: `buildAnnotatedCredibleSet()`, `annotateGwas()` (rsID + position match), `loadCopdGwas()`, `checkAlleleAlignment()`, `getLiftoverChain()`. Generic `sm_predictions` naming adopted throughout.
+- 2026-04-18 — Chunk A.3 landed: explicit input/output schemas (`docs/schemas.md`), nested credible-set output shape (one row per CS with list-column `variants`), helpers `nestCredibleSets()` / `as_flat()` / `write_tsv_pair()`, default column pruning for gnomAD + GWAS (opt in via `fields = "all"`), and provenance metadata propagation (`R/metadata.R`, sidecar JSON on write).

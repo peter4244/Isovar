@@ -55,8 +55,10 @@ annotateGnomad <- function(variant_ids,
                            version = "4.1",
                            endpoint = "https://gnomad-public-us-east-1.s3.amazonaws.com",
                            cache_dir = NULL,
-                           region_pad_bp = 0L) {
+                           region_pad_bp = 0L,
+                           fields = c("default", "all")) {
   dataset <- match.arg(dataset)
+  fields <- match.arg(fields)
   stopifnot(
     is.character(variant_ids), length(variant_ids) >= 1L,
     is.character(endpoint), length(endpoint) == 1L,
@@ -92,7 +94,7 @@ annotateGnomad <- function(variant_ids,
                      all_rows$chr, all_rows$pos, all_rows$ref, all_rows$alt)
   m <- match(key_in, key_out)
 
-  tibble::tibble(
+  out_full <- tibble::tibble(
     variant_id                 = variant_ids,
     chr                        = parts$chr,
     pos                        = parts$pos,
@@ -116,6 +118,26 @@ annotateGnomad <- function(variant_ids,
     grpmax                     = all_rows$grpmax[m],
     fafmax_faf95_max           = all_rows$fafmax_faf95_max[m],
     fafmax_faf95_max_gen_anc   = all_rows$fafmax_faf95_max_gen_anc[m]
+  )
+
+  out <- if (fields == "default") {
+    out_full[, c("variant_id", "chr", "pos", "ref", "alt",
+                 "rsid", "filter", "af", "af_nfe", "af_eas", "grpmax")]
+  } else {
+    out_full
+  }
+
+  setIsovarMeta(
+    out,
+    genome_build = "GRCh38",
+    sources = list(list(
+      id           = paste0("gnomad_v", version, "_", dataset),
+      kind         = "variant_annotation",
+      endpoint     = endpoint,
+      version      = version,
+      dataset      = dataset,
+      genome_build = "GRCh38"
+    ))
   )
 }
 

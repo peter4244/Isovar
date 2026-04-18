@@ -141,30 +141,90 @@ test_that("end-to-end from isovar rank -> gwas join works on AKR1A1 fixture", {
   expect_true(any(ann$gwas_p < 1e-7, na.rm = TRUE))
 })
 
-test_that("buildAnnotatedCredibleSet composes the full pipeline into one table", {
+test_that("buildAnnotatedCredibleSet returns a nested credible-set tibble", {
   skip_on_cran()
   skip_if_no_internet()
-  tbl <- buildAnnotatedCredibleSet(
+  nested <- buildAnnotatedCredibleSet(
     sm_predictions   = akr1a1_fixture(),
     gwas             = akr1a1_gwas_fixture(),
     gene             = "AKR1A1",
     gnomad_cache_dir = "/tmp/isovar_cache"
   )
-  expect_s3_class(tbl, "tbl_df")
-  expect_equal(nrow(tbl), 50L)
-  # Columns from all three layers should be present
-  expect_true(all(c("top_abs_delta", "posterior_inclusion_probability",  # splaire
-                    "rsid", "af", "af_nfe", "grpmax",                    # gnomAD
-                    "gwas_beta", "gwas_p", "gwas_matched_by")            # GWAS
-                  %in% names(tbl)))
-  # Every variant got an rsID (gnomAD coverage is complete for AKR1A1)
-  expect_true(all(!is.na(tbl$rsid)))
+  # Credible-set-level shape
+  expect_s3_class(nested, "tbl_df")
+  expect_equal(nrow(nested), 1L)                  # AKR1A1 has one CS
+  expect_true("variants" %in% names(nested))
+  expect_true("credible_set_id" %in% names(nested))
+  expect_true("n_variants" %in% names(nested))
+  expect_equal(nested$n_variants, 50L)
+
+  # Metadata attached and carries all three upstream sources
+  meta <- getIsovarMeta(nested)
+  source_kinds <- vapply(meta$sources, function(s) s$kind %||% "", character(1))
+  expect_true("splicing_model_predictions" %in% source_kinds)
+  expect_true("variant_annotation"          %in% source_kinds)
+  expect_true("gwas_sumstats"               %in% source_kinds)
+  expect_equal(meta$genome_build, "GRCh38")
+
+  # Variant-level shape (unnest for assertions)
+  flat <- as_flat(nested)
+  expect_equal(nrow(flat), 50L)
+  expect_true(all(c("top_abs_delta", "pip",
+                    "rsid", "af", "af_nfe", "grpmax",
+                    "gwas_beta", "gwas_p", "gwas_matched_by") %in% names(flat)))
+
+  # Default fields trims gnomAD + GWAS extended cols
+  expect_false("af_afr" %in% names(flat))
+  expect_false("gwas_z" %in% names(flat))
+
+  # Every variant got an rsID
+  expect_true(all(!is.na(flat$rsid)))
   # The known GWAS tag SNPs have beta populated
-  rs_hits <- tbl[tbl$rsid %in% c("rs4660861", "rs9147"), ]
+  rs_hits <- flat[flat$rsid %in% c("rs4660861", "rs9147"), ]
   expect_equal(nrow(rs_hits), 2L)
   expect_true(all(!is.na(rs_hits$gwas_beta)))
-  # The known indels have NA GWAS (absent in icgcUkb)
-  indel_misses <- tbl[tbl$rsid %in% c("rs61467610", "rs66922050"), ]
+  # The known indels have NA GWAS
+  indel_misses <- flat[flat$rsid %in% c("rs61467610", "rs66922050"), ]
   expect_equal(nrow(indel_misses), 2L)
   expect_true(all(is.na(indel_misses$gwas_beta)))
+})
+
+test_that("fields='all' carries the extended gnomAD + GWAS columns", {
+  skip_on_cran()
+  skip_if_no_internet()
+  nested <- buildAnnotatedCredibleSet(
+    sm_predictions   = akr1a1_fixture(),
+    gwas             = akr1a1_gwas_fixture(),
+    gene             = "AKR1A1",
+    gnomad_cache_dir = "/tmp/isovar_cache",
+    fields           = "all"
+  )
+  flat <- as_flat(nested)
+  expect_true("af_afr" %in% names(flat))
+  expect_true("gwas_z" %in% names(flat))
+})
+
+test_that("write_tsv_pair writes two TSVs + two metadata sidecars", {
+  skip_on_cran()
+  skip_if_no_internet()
+  nested <- buildAnnotatedCredibleSet(
+    sm_predictions   = akr1a1_fixture(),
+    gwas             = akr1a1_gwas_fixture(),
+    gene             = "AKR1A1",
+    gnomad_cache_dir = "/tmp/isovar_cache"
+  )
+  out_dir <- tempfile("isovar_tsv_pair_")
+  paths <- write_tsv_pair(nested, out_dir)
+  expect_true(file.exists(paths$credible_sets))
+  expect_true(file.exists(paths$variants))
+  expect_true(file.exists(paths$credible_sets_meta))
+  expect_true(file.exists(paths$variants_meta))
+  # Read back and assert shapes
+  cs <- readr::read_tsv(paths$credible_sets, show_col_types = FALSE)
+  vars <- readr::read_tsv(paths$variants,   show_col_types = FALSE)
+  expect_equal(nrow(cs), 1L)
+  expect_equal(nrow(vars), 50L)
+  # Sidecar metadata round-trips
+  meta <- readMeta(paths$credible_sets)
+  expect_equal(meta$genome_build, "GRCh38")
 })

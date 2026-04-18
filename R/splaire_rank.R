@@ -127,7 +127,23 @@ rankSplaireVariants <- function(sm_predictions,
     high_impact   = top_abs_delta >= magnitude_threshold
   )
   out <- out[order(-out$top_abs_delta), , drop = FALSE]
-  out
+
+  src_path <- if (is.character(sm_predictions) && length(sm_predictions) == 1L) {
+    normalizePath(sm_predictions, mustWork = FALSE)
+  } else {
+    "<in-memory data.frame>"
+  }
+  setIsovarMeta(
+    out,
+    genome_build = "GRCh38",
+    sources = list(list(
+      id           = "splaire_predictions",
+      kind         = "splicing_model_predictions",
+      path         = src_path,
+      model        = "splaire / splaireVar (v1)",
+      genome_build = "GRCh38"
+    ))
+  )
 }
 
 # -- internals ---------------------------------------------------------

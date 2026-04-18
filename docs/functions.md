@@ -44,8 +44,35 @@ Classifies ref/alt vs. effect/other orientation as `aligned` / `swapped` / `stra
 ### `getLiftoverChain(from, to, cache_dir)`
 Fetches and caches a UCSC liftOver chain file (e.g. `hg38ToHg19`). Returns an absolute path to the uncompressed chain suitable for `rtracklayer::import.chain()` or `annotateGwas(liftover_chain = ...)`.
 
-### `buildAnnotatedCredibleSet(sm_predictions, gwas, gene, gnomad_cache_dir, liftover_chain, variants_build, gwas_build)`
-**The Chunk A deliverable.** Composes `rankSplaireVariants` → `annotateGnomad` → `annotateGwas` into a single merged per-variant table. One function, one tibble, one gene.
+### `buildAnnotatedCredibleSet(sm_predictions, gwas, gene, gnomad_cache_dir, liftover_chain, variants_build, gwas_build, fields)`
+**The Chunk A deliverable.** Composes `rankSplaireVariants` → `annotateGnomad` → `annotateGwas` and returns a **nested credible-set tibble** — one row per credible set, with a list-column `variants` holding the per-variant tibble. `fields = "default"` (the default) prunes gnomAD and GWAS columns to the canonical set documented in `docs/schemas.md`; `fields = "all"` carries every upstream column forward. Provenance metadata from all three sources is attached via [setIsovarMeta()].
+
+## Output shape helpers (`R/gwas.R`)
+
+### `nestCredibleSets(flat)`
+Re-shapes a flat per-variant tibble (from the three composed annotation functions) into the canonical nested credible-set form.
+
+### `as_flat(x)`
+Inverse of `nestCredibleSets()`. Unnests the `variants` list-column back into a single row per variant, duplicating credible-set-level columns.
+
+### `write_tsv_pair(x, dir)`
+Writes a nested credible-set tibble as two TSVs — `credible_sets.tsv` (one row per CS) + `variants.tsv` (one row per variant with `credible_set_id` key) — plus `.meta.json` sidecars next to each.
+
+## Provenance metadata (`R/metadata.R`)
+
+Every isovar-produced object carries a structured `isovar_meta` attribute. See `docs/schemas.md` for the full schema.
+
+### `setIsovarMeta(x, meta, ...)`
+Attach / overwrite metadata. Accepts either a full metadata list (`setIsovarMeta(x, merged_list)`) or named fields (`setIsovarMeta(x, genome_build = "GRCh38", sources = list(...))`).
+
+### `getIsovarMeta(x, require)`
+Retrieve the attached metadata. Errors by default when absent; pass `require = FALSE` for a `NULL` return instead.
+
+### `mergeIsovarMeta(...)`
+Concatenate metadata from multiple objects, dedup'd by source `id`. Flags `mixed_builds` / `mixed_gtf` when inputs disagree (does not silently resolve).
+
+### `writeMeta(x, data_path)` / `readMeta(data_path)`
+Sidecar JSON round-trip. Writes `<data_path>.meta.json`; reads it back on load.
 
 ## Conventions
 

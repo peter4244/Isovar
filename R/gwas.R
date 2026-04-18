@@ -46,7 +46,20 @@ loadCopdGwas <- function(path, cols = NULL) {
       cli::cli_abort("Requested columns not present: {.val {missing}}")
     out <- out[, cols, drop = FALSE]
   }
-  out
+  setIsovarMeta(
+    out,
+    genome_build = "GRCh37",
+    sources = list(list(
+      id           = "copd_gwas",
+      kind         = "gwas_sumstats",
+      path         = normalizePath(path, mustWork = FALSE),
+      phenotype    = if ("pheno" %in% names(out) && nrow(out) > 0L)
+                       as.character(out$pheno[1]) else NA_character_,
+      study_tag    = if ("tag" %in% names(out) && nrow(out) > 0L)
+                       as.character(out$tag[1]) else NA_character_,
+      genome_build = "GRCh37"
+    ))
+  )
 }
 
 #' Annotate variants with COPD GWAS summary statistics
@@ -169,7 +182,7 @@ annotateGwas <- function(variants, gwas,
                                 other_col = "gwas_otherallele")
   joined$gwas_alignment_status <- align$alignment_status
   joined$gwas_allele_alignment_ok <- align$alignment_ok
-  joined
+  setIsovarMeta(joined, mergeIsovarMeta(variants, gwas))
 }
 
 # Lift GRCh38 -> GRCh37 positions using a chain. Returns a list with
@@ -275,9 +288,14 @@ getLiftoverChain <- function(from = "hg38", to = "hg19",
 #'   position-matching is skipped and only rsID matches are used.
 #' @param variants_build,gwas_build Build labels. Defaults assume
 #'   splaire=GRCh38 and icgcUkb=GRCh37.
-#' @return Tibble with one row per input variant; see [rankSplaireVariants()],
-#'   [annotateGnomad()], and [annotateGwas()] for the columns carried
-#'   through from each layer.
+#' @param fields `"default"` (returns only canonical columns from each
+#'   upstream layer per `docs/schemas.md`) or `"all"` (carries every
+#'   upstream column forward, equivalent to prior behavior).
+#' @return A **nested tibble**: one row per credible set, with a
+#'   list-column `variants` holding the per-variant tibble. Carries a
+#'   merged `isovar_meta` attribute with provenance from all three
+#'   upstream sources. Use [as_flat()] to unnest into the flat form,
+#'   and [write_tsv_pair()] to write credible_sets + variants TSVs.
 #' @export
 buildAnnotatedCredibleSet <- function(sm_predictions,
                                       gwas,
@@ -285,25 +303,139 @@ buildAnnotatedCredibleSet <- function(sm_predictions,
                                       gnomad_cache_dir = NULL,
                                       liftover_chain = NULL,
                                       variants_build = "GRCh38",
-                                      gwas_build = "GRCh37") {
-  ranked <- rankSplaireVariants(sm_predictions, gene = gene)
-  if (nrow(ranked) == 0L) return(ranked)
+                                      gwas_build = "GRCh37",
+                                      fields = c("default", "all")) {
+  fields <- match.arg(fields)
 
-  gnom <- annotateGnomad(ranked$variant_id, cache_dir = gnomad_cache_dir)
-  gnom_keep <- gnom[, c("variant_id", "rsid", "filter", "af",
-                        "af_nfe", "af_afr", "af_eas", "af_sas",
-                        "af_amr", "af_asj", "af_fin", "af_mid",
-                        "af_remaining", "grpmax",
-                        "fafmax_faf95_max", "fafmax_faf95_max_gen_anc")]
+  ranked <- rankSplaireVariants(sm_predictions, gene = gene)
+  if (nrow(ranked) == 0L) return(nestCredibleSets(ranked))
+
+  gnom <- annotateGnomad(ranked$variant_id, cache_dir = gnomad_cache_dir,
+                         fields = fields)
+  gnom_keep <- gnom[, setdiff(names(gnom),
+                              c("chr", "pos", "ref", "alt"))]
   variants <- dplyr::left_join(ranked, gnom_keep, by = "variant_id")
+  variants <- setIsovarMeta(variants, mergeIsovarMeta(ranked, gnom))
 
   if (is.character(gwas) && length(gwas) == 1L)
     gwas <- loadCopdGwas(gwas)
 
-  annotateGwas(variants, gwas,
-               liftover_chain = liftover_chain,
-               variants_build = variants_build,
-               gwas_build     = gwas_build)
+  flat <- annotateGwas(variants, gwas,
+                       liftover_chain = liftover_chain,
+                       variants_build = variants_build,
+                       gwas_build     = gwas_build)
+
+  # Drop GWAS "extended" columns when fields == "default".
+  if (fields == "default") {
+    drop_gwas <- c("gwas_z", "gwas_n", "gwas_imputersq", "gwas_marker",
+                   "gwas_chr", "gwas_pos")
+    flat <- flat[, setdiff(names(flat), drop_gwas), drop = FALSE]
+  }
+
+  nested <- nestCredibleSets(flat)
+  setIsovarMeta(nested, mergeIsovarMeta(flat, list(sources = list())))
+}
+
+#' Re-shape a flat per-variant tibble into a nested credible-set tibble
+#'
+#' Groups the input by `(gene, phenotype, ensembl_id, strand,
+#' credible_set_number)` and packs each group's variant-level fields
+#' into a list-column `variants`. Produces the canonical isovar
+#' credible-set output shape.
+#'
+#' @param flat A tibble from the Step-1 pipeline (output of
+#'   `rankSplaireVariants()` augmented with gnomAD + GWAS columns).
+#' @return A nested tibble with one row per credible set and columns:
+#'   `credible_set_id`, `gene`, `phenotype`, `ensembl_id`, `strand`,
+#'   `credible_set_number`, `n_variants`, `variants` (list-column).
+#'   The input's `isovar_meta` attribute is preserved.
+#' @export
+nestCredibleSets <- function(flat) {
+  key_cols <- c("gene", "phenotype", "ensembl_id", "strand",
+                "credible_set_number")
+  missing <- setdiff(key_cols, names(flat))
+  if (length(missing))
+    cli::cli_abort("Input missing required credible-set columns: {.val {missing}}")
+
+  # Pull 'pip' alias into the variant-level tibble for cleaner schema.
+  flat2 <- flat
+  if ("posterior_inclusion_probability" %in% names(flat2)) {
+    flat2$pip <- flat2$posterior_inclusion_probability
+    flat2$posterior_inclusion_probability <- NULL
+  }
+
+  variant_cols <- setdiff(names(flat2), key_cols)
+
+  nested <- flat2 %>%
+    dplyr::group_by(dplyr::across(dplyr::all_of(key_cols))) %>%
+    tidyr::nest(variants = dplyr::all_of(variant_cols)) %>%
+    dplyr::ungroup() %>%
+    dplyr::mutate(
+      credible_set_id = paste(gene, phenotype, sep = "__"),
+      n_variants      = vapply(variants, nrow, integer(1))
+    ) %>%
+    dplyr::relocate(credible_set_id) %>%
+    dplyr::relocate(n_variants, .after = "credible_set_number")
+
+  meta <- getIsovarMeta(flat, require = FALSE)
+  if (!is.null(meta)) attr(nested, "isovar_meta") <- meta
+  nested
+}
+
+#' Unnest a credible-set tibble back into the flat per-variant shape
+#'
+#' Inverse of [nestCredibleSets()]. Credible-set-level columns are
+#' duplicated across each CS's variants.
+#'
+#' @param x A nested credible-set tibble.
+#' @return A flat tibble with one row per variant.
+#' @export
+as_flat <- function(x) {
+  if (!"variants" %in% names(x))
+    cli::cli_abort("Input does not have a {.field variants} list-column.")
+  flat <- tidyr::unnest(x, cols = "variants")
+  meta <- getIsovarMeta(x, require = FALSE)
+  if (!is.null(meta)) attr(flat, "isovar_meta") <- meta
+  flat
+}
+
+#' Write a credible-set tibble as a pair of TSVs with metadata sidecars
+#'
+#' Produces `<dir>/credible_sets.tsv` (one row per CS, no list-column)
+#' and `<dir>/variants.tsv` (one row per variant, with
+#' `credible_set_id` joining back). Metadata sidecars `.meta.json` are
+#' written next to each TSV.
+#'
+#' @param x A nested credible-set tibble from [buildAnnotatedCredibleSet()].
+#' @param dir Output directory; created if absent.
+#' @return Invisibly, a named list of paths written.
+#' @export
+write_tsv_pair <- function(x, dir) {
+  if (!"variants" %in% names(x))
+    cli::cli_abort("Input does not have a {.field variants} list-column.")
+  if (!dir.exists(dir)) dir.create(dir, recursive = TRUE, showWarnings = FALSE)
+
+  # Credible-set-level: strip variants, strip its meta so it writes plain
+  cs_tbl <- x
+  cs_tbl$variants <- NULL
+  cs_path <- file.path(dir, "credible_sets.tsv")
+  readr::write_tsv(cs_tbl, cs_path)
+
+  # Per-variant: unnest + add credible_set_id first
+  var_tbl <- as_flat(x)
+  var_path <- file.path(dir, "variants.tsv")
+  readr::write_tsv(var_tbl, var_path)
+
+  # Sidecar metadata
+  meta <- getIsovarMeta(x, require = FALSE)
+  if (!is.null(meta)) {
+    writeMeta(meta, cs_path)
+    writeMeta(meta, var_path)
+  }
+
+  invisible(list(credible_sets = cs_path, variants = var_path,
+                 credible_sets_meta = paste0(cs_path, ".meta.json"),
+                 variants_meta = paste0(var_path, ".meta.json")))
 }
 
 #' Check allele alignment between a variant table and a GWAS join
