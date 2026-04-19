@@ -81,6 +81,23 @@ Sidecar JSON round-trip. Writes `<data_path>.meta.json`; reads it back on load.
 - **Cache directories** — all remote-data functions accept a `cache_dir` argument; none are required. Default behavior is no cache.
 - **Argument name `sm_predictions`** — generic for splicing-model predictions. Currently splaire v1 schema only; see `docs/methods.md` "Design notes".
 
+## Isopair interface (`R/isopair_iface.R`)
+
+### `parseStructuresMultiGtf(gtfs, isoform_ids)`
+Calls `Isopair::parseIsoformStructures()` per GTF, binds results with a `source_gtf` tag. First GTF in the list wins on duplicate isoform_ids.
+
+### `extractCdsMultiGtf(gtfs, isoform_ids)`
+Companion CDS extractor — one row per isoform with Isopair's CDS schema + `source_gtf`.
+
+### `loadTranscriptSequences(fastas, isoform_ids)`
+Reads sequences from one or more FASTA files and returns a named character vector shaped for `Isopair::traceReferenceAtg()`. Handles GENCODE pipe-delimited headers and SQANTI/isocall bare IDs.
+
+### `hiddenPtcStatus(pairs, structures, cds, sequences, ejc_threshold)`
+Thin wrapper around `Isopair::traceReferenceAtg()`. For each (reference, comparator) pair, traces the reference ATG through the comparator and classifies the result (`effectively_ptc`, `truncated_no_ejc`, `ref_atg_lost`, `no_downstream_ejc`, `no_ref_cds`, `mapping_failed`). Essential for comparators whose own CDS prediction is missing (most novel IR isoforms).
+
+### `computeDominantIsoform(lr_evidence, source_id, threshold, gene_id)`
+Wraps `Isopair::identifyDominantIsoforms()` with the multi-source count-matrix shape from [loadLongreadEvidence()]. Returns one row per gene: `gene_id`, `dominant_isoform_id`, `dominant_cpm_fraction`.
+
 ## isoscope interface (`R/isoscope_iface.R`)
 
 ### `runIsoscopeGene(gene, isoscope_config_path, output_dir, isoscope_dir, no_expr, extra_args)`
