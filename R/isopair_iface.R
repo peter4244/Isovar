@@ -197,14 +197,26 @@ hiddenPtcStatus <- function(pairs, structures, cds, sequences,
 #' @param ejc_threshold Downstream-EJC distance cutoff; default 50.
 #' @param include_no_stop Emit rows for ATGs whose frame runs off the
 #'   transcript (category `no_stop_in_frame`). Default `TRUE`.
-#' @return A long-format tibble with one row per (isoform, ORF):
-#'   `isoform_id`, `atg_tx_pos`, `stop_tx_pos`, `orf_length`,
-#'   `n_downstream_ejc`, `is_annotated_cds`, `category`.
+#' @param kozak_filter Logical; when `TRUE` (isovar default), only ATGs
+#'   whose Kozak context scores at/above `kozak_threshold` are kept
+#'   before ORF tracing. Enumerating every ATG regardless of Kozak
+#'   produces mostly noise — plausible translation starts need
+#'   initiation-competent context.
+#' @param kozak_threshold Numeric log-odds threshold. Default 0 (above
+#'   random). For a data-driven threshold, pass the output of
+#'   [Isopair::empiricalKozakThreshold()] on an annotated-CDS training
+#'   set (e.g. GENCODE coding isoforms).
+#' @return A long-format tibble with one row per plausibly-translated
+#'   (isoform, ORF): `isoform_id`, `atg_tx_pos`, `kozak_score`,
+#'   `stop_tx_pos`, `orf_length`, `n_downstream_ejc`, `is_annotated_cds`,
+#'   `category`.
 #' @export
 enumerateComparatorOrfs <- function(structures, cds, sequences,
                                     min_orf_nt = 30L,
                                     ejc_threshold = 50L,
-                                    include_no_stop = TRUE) {
+                                    include_no_stop = TRUE,
+                                    kozak_filter = TRUE,
+                                    kozak_threshold = 0) {
   if (!requireNamespace("Isopair", quietly = TRUE))
     cli::cli_abort("Package {.pkg Isopair} is required.")
   Isopair::enumerateOrfs(
@@ -213,7 +225,9 @@ enumerateComparatorOrfs <- function(structures, cds, sequences,
     sequences      = sequences,
     min_orf_nt     = min_orf_nt,
     ejc_threshold  = ejc_threshold,
-    include_no_stop = include_no_stop
+    include_no_stop = include_no_stop,
+    kozak_filter   = kozak_filter,
+    kozak_threshold = kozak_threshold
   )
 }
 
