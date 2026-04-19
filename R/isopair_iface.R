@@ -150,14 +150,98 @@ loadTranscriptSequences <- function(fastas, isoform_ids) {
 #' @param cds CDS annotations (output of [extractCdsMultiGtf()]).
 #' @param sequences Named char vector from [loadTranscriptSequences()].
 #' @param ejc_threshold EJC distance cutoff (default 50, the 50-nt rule).
-#' @return Isopair's per-pair hidden-PTC tibble, unchanged.
+#' @param resolve_alt_start Logical; when TRUE (isovar default), comparators
+#'   whose reference ATG isn't exonic are re-evaluated from the first viable
+#'   alternative ATG in the comparator (Isopair's `resolve_alt_start` path).
+#'   Defaults to TRUE here because isovar's workflow always wants a resolved
+#'   NMD verdict — `ref_atg_lost` as a terminal label silently drops
+#'   translated-but-alt-start isoforms from downstream NMD analysis.
+#' @param min_alt_orf_nt Minimum alt-start ORF length (nt) to count as
+#'   viable. Default 30 (10 aa). Passed through to Isopair.
+#' @return Isopair's per-pair hidden-PTC tibble, unchanged in schema; when
+#'   `resolve_alt_start = TRUE` the tibble also contains `alt_start_tx_pos`,
+#'   `alt_start_orf_length`, and may emit `alt_start_effectively_ptc`,
+#'   `alt_start_no_downstream_ejc`, `ref_atg_lost_no_viable_start` categories.
 #' @export
 hiddenPtcStatus <- function(pairs, structures, cds, sequences,
-                            ejc_threshold = 50L) {
+                            ejc_threshold = 50L,
+                            resolve_alt_start = TRUE,
+                            min_alt_orf_nt = 30L) {
   if (!requireNamespace("Isopair", quietly = TRUE))
     cli::cli_abort("Package {.pkg Isopair} is required.")
   Isopair::traceReferenceAtg(pairs, structures, cds, sequences,
-                             ejc_threshold = ejc_threshold)
+                             ejc_threshold     = ejc_threshold,
+                             resolve_alt_start = resolve_alt_start,
+                             min_alt_orf_nt    = min_alt_orf_nt)
+}
+
+#' Enumerate and classify every viable ORF in a set of transcripts
+#'
+#' Thin wrapper around \code{Isopair::enumerateOrfs()} — returns one row
+#' per (isoform, viable ORF), with per-ORF NMD classification. This is
+#' the per-ORF companion to [hiddenPtcStatus()]'s per-(ref, comp)
+#' output: while `hiddenPtcStatus` evaluates one ORF per pair (ref's
+#' ATG traced through comp, with optional alt-start fallback),
+#' `enumerateComparatorOrfs` enumerates *every* viable ORF in each
+#' comparator transcript and classifies each independently.
+#'
+#' See the `feedback_per_orf_classifications` memory note for the
+#' design principle: transcript-level PTC / NMD labels are rollups over
+#' per-ORF verdicts, not intrinsic properties of transcripts.
+#'
+#' @param structures Output of [parseStructuresMultiGtf()] — or any
+#'   Isopair structures tibble.
+#' @param cds Output of [extractCdsMultiGtf()].
+#' @param sequences Output of [loadTranscriptSequences()].
+#' @param min_orf_nt Minimum ORF length (nt); default 30.
+#' @param ejc_threshold Downstream-EJC distance cutoff; default 50.
+#' @param include_no_stop Emit rows for ATGs whose frame runs off the
+#'   transcript (category `no_stop_in_frame`). Default `TRUE`.
+#' @return A long-format tibble with one row per (isoform, ORF):
+#'   `isoform_id`, `atg_tx_pos`, `stop_tx_pos`, `orf_length`,
+#'   `n_downstream_ejc`, `is_annotated_cds`, `category`.
+#' @export
+enumerateComparatorOrfs <- function(structures, cds, sequences,
+                                    min_orf_nt = 30L,
+                                    ejc_threshold = 50L,
+                                    include_no_stop = TRUE) {
+  if (!requireNamespace("Isopair", quietly = TRUE))
+    cli::cli_abort("Package {.pkg Isopair} is required.")
+  Isopair::enumerateOrfs(
+    structures     = structures,
+    cds_metadata   = cds,
+    sequences      = sequences,
+    min_orf_nt     = min_orf_nt,
+    ejc_threshold  = ejc_threshold,
+    include_no_stop = include_no_stop
+  )
+}
+
+#' Roll per-ORF classifications up to a per-transcript NMD verdict
+#'
+#' Convenience aggregator over the output of
+#' [enumerateComparatorOrfs()]. An isoform is flagged as an NMD
+#' substrate when *any* of its ORFs is `effectively_ptc`. Use this
+#' when a report needs a transcript-level verdict while keeping the
+#' per-ORF detail accessible.
+#'
+#' @param orfs Output of [enumerateComparatorOrfs()] /
+#'   [Isopair::enumerateOrfs()].
+#' @return A tibble with one row per isoform: `isoform_id`, `n_orfs`,
+#'   `n_ptc_orfs`, `any_ptc` (logical), `has_annotated_cds_ptc`.
+#' @export
+summarizeOrfsToTranscript <- function(orfs) {
+  orfs %>%
+    dplyr::group_by(isoform_id) %>%
+    dplyr::summarise(
+      n_orfs               = dplyr::n(),
+      n_ptc_orfs           = sum(category == "effectively_ptc", na.rm = TRUE),
+      n_no_stop            = sum(category == "no_stop_in_frame", na.rm = TRUE),
+      any_ptc              = any(category == "effectively_ptc", na.rm = TRUE),
+      has_annotated_cds_ptc = any(is_annotated_cds &
+                                   category == "effectively_ptc", na.rm = TRUE),
+      .groups = "drop"
+    )
 }
 
 #' Identify dominant isoforms across long-read sources via Isopair

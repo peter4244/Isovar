@@ -60,6 +60,48 @@ test_that("extractCdsMultiGtf returns the Isopair CDS schema + tag", {
                     "orf_length", "source_gtf") %in% names(cds)))
 })
 
+test_that("enumerateComparatorOrfs returns per-(isoform, ORF) rows", {
+  skip_on_cran()
+  skip_if(!file.exists(akr_gencode), "GENCODE GTF not present")
+  skip_if(!file.exists(akr_gencode_fa), "GENCODE FASTA not present")
+  skip_if(!requireNamespace("Isopair", quietly = TRUE), "Isopair not installed")
+
+  ids <- c("ENST00000372070.7", "ENST00000621846.4")
+  structs <- parseStructuresMultiGtf(list(gencode = akr_gencode), ids)
+  cds     <- extractCdsMultiGtf(list(gencode = akr_gencode), ids)
+  seqs    <- loadTranscriptSequences(akr_gencode_fa, ids)
+  orfs    <- enumerateComparatorOrfs(structs, cds, seqs)
+
+  expect_true(all(c("isoform_id", "atg_tx_pos", "orf_length",
+                    "n_downstream_ejc", "is_annotated_cds", "category")
+                  %in% names(orfs)))
+  expect_true(all(orfs$isoform_id %in% ids))
+  # Each isoform contributes multiple ORFs
+  expect_gt(nrow(orfs), length(ids))
+  # At least one annotated-CDS ORF should be present
+  expect_true(any(orfs$is_annotated_cds))
+})
+
+test_that("summarizeOrfsToTranscript collapses to per-isoform NMD verdict", {
+  orfs <- tibble::tibble(
+    isoform_id       = c("A","A","A","B","B"),
+    atg_tx_pos       = c(10L, 50L, 90L, 20L, 80L),
+    stop_tx_pos      = c(40L, 80L, NA_integer_, 50L, 110L),
+    orf_length       = c(30L, 30L, NA_integer_, 30L, 30L),
+    n_downstream_ejc = c(2L,  0L,  NA_integer_, 1L,  0L),
+    is_annotated_cds = c(FALSE, TRUE, FALSE, FALSE, FALSE),
+    category         = c("effectively_ptc", "no_downstream_ejc",
+                         "no_stop_in_frame",
+                         "effectively_ptc", "no_downstream_ejc")
+  )
+  summ <- summarizeOrfsToTranscript(orfs)
+  expect_equal(nrow(summ), 2L)
+  expect_equal(summ$n_orfs,     c(3L, 2L))
+  expect_equal(summ$n_ptc_orfs, c(1L, 1L))
+  expect_equal(summ$any_ptc,    c(TRUE, TRUE))
+  expect_equal(summ$n_no_stop,  c(1L, 0L))
+})
+
 test_that("hiddenPtcStatus forwards to Isopair::traceReferenceAtg", {
   skip_on_cran()
   skip_if(!file.exists(akr_gencode), "GENCODE GTF not present")
