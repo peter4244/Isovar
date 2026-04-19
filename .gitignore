@@ -11,6 +11,9 @@
 cache/
 /tmp/
 
+# Per-run outputs (local only)
+runs/
+
 # macOS
 .DS_Store
 
