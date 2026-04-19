@@ -202,10 +202,12 @@ hiddenPtcStatus <- function(pairs, structures, cds, sequences,
 #'   before ORF tracing. Enumerating every ATG regardless of Kozak
 #'   produces mostly noise — plausible translation starts need
 #'   initiation-competent context.
-#' @param kozak_threshold Numeric log-odds threshold. Default 0 (above
-#'   random). For a data-driven threshold, pass the output of
-#'   [Isopair::empiricalKozakThreshold()] on an annotated-CDS training
-#'   set (e.g. GENCODE coding isoforms).
+#' @param kozak_threshold Numeric log-odds threshold. Default `NULL`
+#'   resolves to `Isopair::defaultKozakThreshold(0.05)` — the
+#'   MANE-calibrated 5th-percentile cutoff (includes 95% of annotated
+#'   CDS starts in GENCODE v49 MANE Select). Override by passing a
+#'   numeric, or compute a custom threshold with
+#'   [Isopair::empiricalKozakThreshold()].
 #' @return A long-format tibble with one row per plausibly-translated
 #'   (isoform, ORF): `isoform_id`, `atg_tx_pos`, `kozak_score`,
 #'   `stop_tx_pos`, `orf_length`, `n_downstream_ejc`, `is_annotated_cds`,
@@ -216,7 +218,7 @@ enumerateComparatorOrfs <- function(structures, cds, sequences,
                                     ejc_threshold = 50L,
                                     include_no_stop = TRUE,
                                     kozak_filter = TRUE,
-                                    kozak_threshold = 0) {
+                                    kozak_threshold = NULL) {
   if (!requireNamespace("Isopair", quietly = TRUE))
     cli::cli_abort("Package {.pkg Isopair} is required.")
   Isopair::enumerateOrfs(
@@ -256,6 +258,40 @@ summarizeOrfsToTranscript <- function(orfs) {
                                    category == "effectively_ptc", na.rm = TRUE),
       .groups = "drop"
     )
+}
+
+#' Select the primary translation start per isoform
+#'
+#' Thin wrapper around [Isopair::selectPrimaryOrf()] — picks a single
+#' primary ORF per comparator using the two-step rule:
+#'
+#' 1. Use the dominant isoform's annotated ATG when it's exonic in the
+#'    comparator (`primary_source = "dominant"`).
+#' 2. Otherwise use the 5'-most Kozak-passing ATG enumerated in the
+#'    comparator (`primary_source = "first_hq"`).
+#'
+#' The primary ORF is the translation start a ribosome most plausibly
+#' uses given the cohort's dominant isoform. Per-transcript NMD
+#' verdicts downstream apply to this single primary ORF; the full
+#' per-ORF landscape remains available via [enumerateComparatorOrfs()].
+#'
+#' @param orfs Output of [enumerateComparatorOrfs()] (Kozak-gated).
+#' @param structures Output of [parseStructuresMultiGtf()].
+#' @param cds Output of [extractCdsMultiGtf()].
+#' @param dominant_isoform_id HGNC-scoped isoform ID to treat as the
+#'   dominant transcript. Pass the result of [computeDominantIsoform()]$
+#'   `dominant_isoform_id[1]`.
+#' @return Tibble with one row per isoform: `isoform_id`,
+#'   `primary_atg_tx_pos`, `primary_kozak_score`, `primary_source`
+#'   (`"dominant"` / `"first_hq"`), `primary_category`,
+#'   `primary_orf_length`, `primary_n_downstream_ejc`.
+#' @export
+selectComparatorPrimaryOrf <- function(orfs, structures, cds,
+                                       dominant_isoform_id) {
+  if (!requireNamespace("Isopair", quietly = TRUE))
+    cli::cli_abort("Package {.pkg Isopair} is required.")
+  Isopair::selectPrimaryOrf(orfs, structures, cds,
+                             dominant_isoform_id = dominant_isoform_id)
 }
 
 #' Identify dominant isoforms across long-read sources via Isopair
